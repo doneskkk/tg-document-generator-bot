@@ -1,17 +1,19 @@
-const { DataTypes } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
 const Usage = sequelize.define('Usage', {
   userId: {
     type: DataTypes.STRING,
-    allowNull: false,
     primaryKey: true,
+    allowNull: false,
   },
   count: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
+    allowNull: false,
   },
 }, {
+  tableName: 'usages',
   timestamps: false,
 });
 
