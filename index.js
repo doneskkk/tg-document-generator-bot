@@ -16,12 +16,13 @@ const bot = new TelegramBot(token, { polling: true });
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
+    const userId = msg.from.id.toString();
 
     if (text === '/start') {
       await bot.sendMessage(chatId, 'Plăcută utilizare, de asemenea, suntem mereu deschiși la feedback-ul dumneavoastră.', {
         reply_markup: {
           keyboard: [
-            [{ text: " 📑 Creare documentului ", web_app: { url: webAppUrl + '/form' } }]
+            [{ text: " 📑 Creare documentului ", web_app: { url: webAppUrl + '/form' } }],
           ]
         }
       });
@@ -31,12 +32,20 @@ const bot = new TelegramBot(token, { polling: true });
       try {
         const totalUsers = await Usage.count();
         const totalUses = await Usage.sum('count');
-        bot.sendMessage(chatId, `Всего пользователей: ${totalUsers}\nОбщее количество использований: ${totalUses}`);
-        console.log(`Всего пользователей: ${totalUsers}\nОбщее количество использований: ${totalUses}`);
+        
+        // Получение количества использований текущего пользователя
+        const userUsageCount = await getUserUsageCount(userId);
+
+        const userUsageMessage = userUsageCount !== null
+          ? `📈Numărul total de utilizări din contul dvs. ${userUsageCount}`
+          : '❌Nu s-au putut obține datele despre utilizarea dvs.';
+
+          await bot.sendMessage(chatId, `📊Statistica botului:\n\n${userUsageMessage}\n\n👥Număr total de utilizatori: ${totalUsers}\n\n📉 Numărul total de utilizări: ${totalUses}`);
+        console.log(`Număr total de utilizatori: ${totalUsers}\nNumărul total de utilizări: ${totalUses}\n${userUsageMessage}`);
 
       } catch (error) {
         console.error('Error fetching stats:', error);
-        bot.sendMessage(chatId, 'Произошла ошибка, попробуйте позже');
+        await bot.sendMessage(chatId, '⚠️ A apărut o eroare, vă rugăm să încercați din nou mai târziu');
       }
     }
 
@@ -50,14 +59,13 @@ const bot = new TelegramBot(token, { polling: true });
           fs.writeFileSync(outputPath, generatedDoc);
 
           await bot.sendDocument(chatId, outputPath, {
-            caption: 'Document generat, multumesc pentru vizita'
+            caption: '📄Document generat, multumesc pentru vizita'
           }).then(async () => {
             fs.unlinkSync(outputPath);
 
             // Учет использования бота после успешной генерации файла
-            const userId = msg.from.id.toString();
             try {
-              let usage = await Usage.findByPk(userId);
+              let usage = await Usage.findOne({ where: { userId: userId } });
 
               if (!usage) {
                 await Usage.create({ userId, count: 1 });
@@ -68,11 +76,13 @@ const bot = new TelegramBot(token, { polling: true });
             } catch (error) {
               console.error('Error tracking usage:', error);
             }
+
+            await bot.sendMessage(chatId, 'Dacă doriți să vedeți statistica botului, apăsați pe /stats');
           }).catch((error) => {
             console.error('Error sending document:', error);
           });
         } else {
-          bot.sendMessage(chatId, 'Error, please try later.');
+          await bot.sendMessage(chatId, '⚠️ Error, please try later.');
         }
       } catch (e) {
         console.log(e);
@@ -122,6 +132,18 @@ async function generateDocFromTemplate(data) {
     return generatedDoc;
   } catch (error) {
     console.error('Error generating document:', error);
+    return null;
+  }
+}
+
+// Функция для получения количества использований конкретного пользователя
+async function getUserUsageCount(userId) {
+  try {
+    // Запрос к базе данных для получения количества использований пользователя
+    const userUsage = await Usage.sum('count', { where: { userId: userId } });
+    return userUsage || 0; 
+  } catch (error) {
+    console.error('Error fetching user usage count:', error);
     return null;
   }
 }
